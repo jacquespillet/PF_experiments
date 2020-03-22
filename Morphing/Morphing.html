@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>My first three.js app</title>
+		<style>
+			body { margin: 0; }
+			canvas { display: block; }
+		</style>
+	</head>
+	<body>
+        <script src="../js/three.js"></script>
+        <script src="../js/OBJLoader.js"></script>
+        <script id="morph" type="x-shader/x-vertex">
+            vec3 dir = (target - position) * factor;
+            vec3 transformed = position + dir;
+        </script>
+
+		<script>
+            function interpolant5(t) {
+                return 6 * t * t * t * t * t - 15 * t * t * t * t + 10 * t * t * t;
+            }         
+
+            var startTime = Date.now();
+            var scene = new THREE.Scene();
+            
+            {
+                const near = 1;
+                const far = 10;
+                const color = new THREE.Color("rgb(150, 100, 10)");
+                scene.fog = new THREE.Fog(color, near, far);
+                scene.background = new THREE.Color(color);
+            }
+            
+            var camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
+            
+            //Set renderer
+            var renderer = new THREE.WebGLRenderer();
+            renderer.setSize( window.innerWidth, window.innerHeight );
+            document.body.appendChild( renderer.domElement );     
+
+            var morphMaterial = new THREE.MeshPhongMaterial( { color: new THREE.Color("rgb(176, 120, 143)"), transparent:true, opacity:1 } );
+            var srcMaterial = new THREE.MeshPhongMaterial( { color: new THREE.Color("rgb(176, 120, 143)"), transparent:true, opacity:1 } );
+            var trgtMaterial = morphMaterial.clone()
+
+            var morphObj, objSrc, objTrgt;
+
+            var morphMaterialShader;
+            var objLoader = new THREE.OBJLoader();
+            objLoader.load('../assets/head.obj', (source) => {
+                objLoader.load('assets/untitled.obj', (target) => {
+                    
+                    morphMaterial.onBeforeCompile = function ( shader ) {
+                        shader.uniforms.factor = { value: 0 };
+                        shader.vertexShader = 'uniform float factor;\n' + shader.vertexShader;
+                        shader.vertexShader = 'attribute vec3 target;\n' + shader.vertexShader;
+                        shader.vertexShader = 'attribute vec3 targetNormal;\n' + shader.vertexShader;
+                        shader.vertexShader = shader.vertexShader.replace(
+                            '#include <begin_vertex>',
+                            document.getElementById('morph').textContent
+                        );
+
+                        shader.vertexShader = shader.vertexShader.replace(
+                            '#include <beginnormal_vertex>',
+                                                            `
+                            vec3 objectNormal = normalize((factor * targetNormal) + (1.0-factor) * normal);
+
+                            #ifdef USE_TANGENT
+
+                                vec3 objectTangent = vec3( tangent.xyz );
+
+                            #endif
+                            `                        
+                        );
+
+                        morphMaterialShader = shader;
+                    }; 
+                    
+                    morphObj = source.children[0]
+                    objSrc = source.children[0].clone();
+                    // objSrc.scale.x =1.1; 
+                    // objSrc.scale.y =1.1; 
+                    // objSrc.scale.z =1.1; 
+                    objTrgt = target.children[0]
+
+                    console.log(objSrc);
+                    
+                    morphObj.material = morphMaterial;
+                    objSrc.material = srcMaterial;
+                    objTrgt.material = trgtMaterial;
+
+                    objTrgt.material.side = THREE.DoubleSide;
+                    objSrc.material.side = THREE.DoubleSide;
+                    morphObj.material.side = THREE.DoubleSide;
+
+
+                    
+                    console.log(morphObj.geometry.attributes);
+
+                    const targets = [];
+                    const targetNormals = [];
+
+                    for (let i = 0; i < morphObj.geometry.attributes.position.count * 3; i+=3*3) {
+                        var v0 = new THREE.Vector3(morphObj.geometry.attributes.position.array[i], morphObj.geometry.attributes.position.array[i+1], morphObj.geometry.attributes.position.array[i+2]).multiplyScalar(1/3);
+                        var v1 = new THREE.Vector3(morphObj.geometry.attributes.position.array[i+3], morphObj.geometry.attributes.position.array[i+3+1], morphObj.geometry.attributes.position.array[i+3+2]).multiplyScalar(1/3);
+                        var v2 = new THREE.Vector3(morphObj.geometry.attributes.position.array[i+6], morphObj.geometry.attributes.position.array[i+6+1], morphObj.geometry.attributes.position.array[i+6+2]).multiplyScalar(1/3);
+                        
+                        var n0 = new THREE.Vector3(morphObj.geometry.attributes.normal.array[i], morphObj.geometry.attributes.normal.array[i+1], morphObj.geometry.attributes.normal.array[i+2]).multiplyScalar(1/3);
+                        var n1 = new THREE.Vector3(morphObj.geometry.attributes.normal.array[i+3], morphObj.geometry.attributes.normal.array[i+3+1], morphObj.geometry.attributes.normal.array[i+3+2]).multiplyScalar(1/3);
+                        var n2 = new THREE.Vector3(morphObj.geometry.attributes.normal.array[i+6], morphObj.geometry.attributes.normal.array[i+6+1], morphObj.geometry.attributes.normal.array[i+6+2]).multiplyScalar(1/3);
+                        
+                        var point = v0.add(v1).add(v2);
+                        var direction = n0.add(n1).add(n2);
+                    
+                        var raycaster = new THREE.Raycaster(point, direction, 0.01, 10000);
+                        var res = raycaster.intersectObject( objTrgt, true);
+                        //if(i==0)console.log(res[0].face.vertexNormals);
+                        // console.log(res[0].face.vertexNormals);
+
+                        var tv0 = new THREE.Vector3(objTrgt.geometry.attributes.position.array[res[0].face.a * 3], objTrgt.geometry.attributes.position.array[res[0].face.a * 3 + 1], objTrgt.geometry.attributes.position.array[res[0].face.a * 3 + 2])
+                        var tv1 = new THREE.Vector3(objTrgt.geometry.attributes.position.array[res[0].face.b * 3], objTrgt.geometry.attributes.position.array[res[0].face.b * 3 + 1], objTrgt.geometry.attributes.position.array[res[0].face.b * 3 + 2])
+                        var tv2 = new THREE.Vector3(objTrgt.geometry.attributes.position.array[res[0].face.c * 3], objTrgt.geometry.attributes.position.array[res[0].face.c * 3 + 1], objTrgt.geometry.attributes.position.array[res[0].face.c * 3 + 2])
+                        
+                        var tn0 = new THREE.Vector3(objTrgt.geometry.attributes.normal.array[res[0].face.a * 3], objTrgt.geometry.attributes.normal.array[res[0].face.a * 3 + 1], objTrgt.geometry.attributes.normal.array[res[0].face.a * 3 + 2])
+                        var tn1 = new THREE.Vector3(objTrgt.geometry.attributes.normal.array[res[0].face.b * 3], objTrgt.geometry.attributes.normal.array[res[0].face.b * 3 + 1], objTrgt.geometry.attributes.normal.array[res[0].face.b * 3 + 2])
+                        var tn2 = new THREE.Vector3(objTrgt.geometry.attributes.normal.array[res[0].face.c * 3], objTrgt.geometry.attributes.normal.array[res[0].face.c * 3 + 1], objTrgt.geometry.attributes.normal.array[res[0].face.c * 3 + 2])
+                        
+                        if(i<500)console.log(tn0);
+                        
+                        targets.push(tv0.x); //x
+                        targets.push(tv0.y); //y
+                        targets.push(tv0.z); //z
+                        
+                        targets.push(tv1.x); //x
+                        targets.push(tv1.y); //y
+                        targets.push(tv1.z); //z
+                        
+                        targets.push(tv2.x); //x
+                        targets.push(tv2.y); //y
+                        targets.push(tv2.z); //z
+                        
+                        targetNormals.push(tn0.x); //x
+                        targetNormals.push(tn0.y); //y
+                        targetNormals.push(tn0.z); //z
+                        
+                        targetNormals.push(tn1.x); //x
+                        targetNormals.push(tn1.y); //y
+                        targetNormals.push(tn1.z); //z
+                        
+                        targetNormals.push(tn2.x); //x
+                        targetNormals.push(tn2.y); //y
+                        targetNormals.push(tn2.z); //z
+                    }
+                    
+
+                    morphObj.geometry.setAttribute(
+                    'target',
+                    new THREE.BufferAttribute(new Float32Array(targets), 3));
+
+                    morphObj.geometry.setAttribute(
+                    'targetNormal',
+                    new THREE.BufferAttribute(new Float32Array(targetNormals), 3));
+
+
+                    scene.add(morphObj);
+                    scene.add(objTrgt);
+                    // scene.add(objSrc);
+                });
+            });
+
+
+            var light = new THREE.PointLight( 0xffffff, 1, 100 );
+            light.position.set(3, 5,8);
+            scene.add( light );
+
+
+            camera.position.y = 0;
+            camera.position.z = 1;
+            camera.position.x = 0;
+            camera.lookAt(new THREE.Vector3(0,0,0));
+
+            var hasStarted=false;
+
+            console.log(trgtMaterial)
+            console.log(morphMaterial)            
+            function animate() {
+
+                if(!hasStarted) {
+                    startTime = Date.now();
+                    hasStarted=true;
+                } else {
+
+                    var elapsedMilliseconds = Date.now() - startTime;
+                    var elapsedSeconds = elapsedMilliseconds / 1000.;
+                    
+                    camera.position.x = Math.sin(elapsedSeconds * 0.5) * 1;
+                    camera.position.z = Math.cos(elapsedSeconds * 0.5) * 1;
+                    camera.lookAt(new THREE.Vector3(0,0,0));
+
+                    light.position.set(camera.position.x, 0,camera.position.z);
+
+                    if(objTrgt && morphMaterialShader) {
+                        var factor = interpolant5((Math.cos(elapsedSeconds * 0.5) + 1.0) * 0.5);
+                        morphMaterialShader.uniforms.factor.value = factor;
+                        objTrgt.scale.x= factor;
+                        objTrgt.scale.y= factor;
+                        objTrgt.scale.z= factor;
+                        trgtMaterial.opacity = factor;
+
+                        // if(factor>0.99) morphObj.visible=false;
+                        // else morphObj.visible=true;
+                    }
+                }
+                requestAnimationFrame( animate );
+                renderer.render( scene, camera );
+
+            }
+            animate();                               
+		</script>
+	</body>
+</html>
+
+ScanLAB01
