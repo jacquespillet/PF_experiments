@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>My first three.js app</title>
+		<style>
+			body { margin: 0; }
+			canvas { display: block; }
+		</style>
+	</head>
+	<body>
+		<script src="../js/three.js"></script>
+		<script>
+            
+
+            var startTime = Date.now();
+			var scene = new THREE.Scene();
+			var camera = new THREE.PerspectiveCamera( 75, window.innerWidth/window.innerHeight, 0.1, 1000 );
+			var renderer = new THREE.WebGLRenderer();
+			renderer.setSize( window.innerWidth, window.innerHeight );
+            document.body.appendChild( renderer.domElement );
+            var raycaster = new THREE.Raycaster();
+            camera.position.z = 5;
+
+            var sizeX = 10;
+            var sizeY = 10;
+            var width=10;
+            var height=10;
+            var plane;
+            var geometry0, geometry1;
+            {
+                var geometry0 = new THREE.PlaneBufferGeometry( 10, 10, sizeX, sizeY);
+                var loader = new THREE.TextureLoader();
+                loader.load(
+                    '../assets/img/tile.jpg',
+                    function ( texture ) {
+                        geometry1 = geometry0.clone();
+                        var material = new THREE.MeshBasicMaterial( {color: 0xffffff, side: THREE.DoubleSide, map:texture} );
+                        // material.wireframe=true;
+                        plane = new THREE.Mesh( geometry0, material );
+                        scene.add( plane );   
+                    },
+                );                              
+            }
+
+            {
+                var light = new THREE.PointLight( 0xffffff, 1, 100 );
+                light.position.set( 0, 10, 10 );
+                scene.add( light );
+            }
+            
+
+            camera.position.set(0, 0,10);
+
+            var cellWidth = width/sizeX;
+            var cellHeight = height/sizeY;
+            var cellHyp = Math.sqrt(cellWidth*cellWidth + cellHeight*cellHeight);
+            var neighbourLUT = [
+                [new THREE.Vector2(-1, 0), cellWidth],
+                [new THREE.Vector2(1, 0), cellWidth],
+                [new THREE.Vector2(0, -1), cellHeight],
+                [new THREE.Vector2(0, 1), cellHeight],
+                [new THREE.Vector2(-1, 1), cellHyp],
+                [new THREE.Vector2(1, 1), cellHyp],
+                [new THREE.Vector2(-1, -1), cellHyp],
+                [new THREE.Vector2(1, -1), cellHyp],
+            ]
+            
+            var isDragging=false;
+            var mousePos, prevMousePos;
+            var hitPosition;
+            var radius=5;
+            
+			var animate = function () {
+                if(plane!=undefined) {
+                    var array =plane.geometry.attributes.position.array; 
+                    var normalArray =plane.geometry.attributes.normal.array;
+
+                    if(isDragging) {
+                        if(prevMousePos) {
+                            var dispx = Math.min((mousePos[0] - prevMousePos[0])*0.001, 2);
+                            var dispy = Math.min((mousePos[1] - prevMousePos[1])*0.001, 2);
+                            var array =plane.geometry.attributes.position.array;
+                            var x = Math.floor(hitPosition.x * sizeX);
+                            var y = Math.floor(hitPosition.y * sizeY);
+
+                            for(var dy=y-radius; dy<y+radius; dy++) {
+                                for(var dx=y-radius; dx<y+radius; dx++) {
+                                    if(dx >= 0 && dx <= sizeX && dy >= 0 && dy <= sizeY) {
+                                        var inx = (y * (sizeX+1) + x) * 3;
+                                        array[inx] += dispx
+                                        array[inx+1] -= dispy
+                                    }
+                                }
+                            }
+                            
+                        }
+
+                        prevMousePos = mousePos;
+                    }
+
+                    var elapsedMilliseconds = Date.now() - startTime;
+                    var elapsedSeconds = elapsedMilliseconds / 1000.;
+
+                    var inx=0;
+                    for(var y=0; y<=sizeY; y++) {
+                        for(var x=0; x<=sizeX; x++) {
+                            inx = (y * (sizeX+1) + x) * 3;
+                            var currentPos = new THREE.Vector3(array[inx], array[inx+1], array[inx+2]);
+                            var movementVector = new THREE.Vector3(0,0,0);
+                            for(var i=0; i<neighbourLUT.length; i++) {
+                                var neighbour = new THREE.Vector2(x, y).add(neighbourLUT[i][0]);
+                                if(neighbour.x >= 0 && neighbour.x <= sizeX && neighbour.y >= 0 && neighbour.y <= sizeY) {
+                                    var neighbourInx = (neighbour.y * (sizeX+1) + neighbour.x) * 3;
+                                    var neighbourPos = new THREE.Vector3(array[neighbourInx], array[neighbourInx+1], array[neighbourInx+2]);
+                                    var springVector = neighbourPos.clone().sub(currentPos);
+                                    var length = springVector.length();
+                                    var undeformedLength = neighbourLUT[i][1];
+                                    var forceScaler = (length - undeformedLength) / undeformedLength;
+                                    forceScaler = Math.min(1, forceScaler);
+                                    var forceVector = springVector.clone().multiplyScalar(forceScaler*0.1);
+                                    movementVector.add(forceVector);
+                                }
+                            }
+                            var newPos = currentPos.clone().add(movementVector);
+                            geometry1.attributes.position.array[inx] = newPos.x;
+                            geometry1.attributes.position.array[inx+1] = newPos.y;
+                            geometry1.attributes.position.array[inx+2] = newPos.z;
+                        }
+                    }
+                        
+
+                    plane.geometry = geometry1.clone();
+                    plane.geometry.needsUpdate=true;
+                }
+
+				requestAnimationFrame( animate );
+                renderer.render( scene, camera );
+			};
+
+
+            document.onmousedown = function(){
+                var mouse = new THREE.Vector2();                
+                mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+                mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+                raycaster.setFromCamera( mouse, camera );
+                var intersects = raycaster.intersectObjects( scene.children );
+                for ( var i = 0; i < intersects.length; i++ ) {
+                    hitPosition = intersects[i].uv;
+                    hitPosition.y = 1 - hitPosition.y;
+                    isDragging=true;
+                }
+            }
+            
+            document.onmouseup = function(){
+                prevMousePos=undefined;
+                isDragging=false;
+            }
+            document.onmousemove = function(event){
+                mousePos = [event.clientX, event.clientY]
+            }
+
+			animate();
+		</script>
+	</body>
+</html>

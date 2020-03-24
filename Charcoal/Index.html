@@ -50,7 +50,7 @@
                 fEnhIntensity = pow(lambertIntensity, contrastExponent);                
                 
 
-                mat4 mvp = projectionMatrix * modelViewMatrix  * modelMatrix ;
+                mat4 mvp = projectionMatrix * modelViewMatrix ;
                 vec4 clipSpace = mvp * vec4( position, 1.0 );
                 gl_Position = clipSpace;
                 

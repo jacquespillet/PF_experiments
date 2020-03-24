@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>My first three.js app</title>
+		<style>
+			body { margin: 0; }
+			canvas { display: block; }
+		</style>
+	</head>
+	<body>
+        <script id="vertexShader" type="x-shader/x-vertex">
+            //Built in uniforms:
+            //uniform mat4 modelMatrix;
+            //uniform mat4 modelViewMatrix;
+            //uniform mat4 projectionMatrix;
+            //uniform mat4 viewMatrix;
+            //uniform mat3 normalMatrix;
+            //uniform vec3 cameraPosition
+
+            //Vertex attributes
+            //attribute vec3 position;
+            //attribute vec3 normal;
+            //attribute vec2 uv;            
+            
+            varying vec3 fragPos;
+            varying vec3 fragNormal;
+            
+            void main()	{
+                fragPos = (modelMatrix * vec4(position, 1.0)).xyz;
+                fragNormal = normal;
+                
+                mat4 mvp = projectionMatrix * modelViewMatrix;
+                gl_Position = mvp * vec4( position, 1.0 );
+            }
+        </script>
+        
+        <script id="fragmentShader" type="x-shader/x-fragment">
+            //Frag attributes
+            //attribute vec3 color;
+            //uniform mat4 viewMatrix;
+            //uniform vec3 cameraPosition;            
+            
+            uniform mat4 cameraModel;
+
+            varying vec3 fragPos;
+            varying vec3 fragNormal;
+
+            const float excluded_edges=0.1;
+            const vec4 edgeColor = vec4(0.8, 0.8, 0.8, 1.0);
+            const float numEdges=10.0;
+
+            uniform samplerCube skybox;
+            void main()	{
+                vec3 viewDir = cameraModel[2].xyz;
+                //float factor = dot(normalize(cameraPosition - fragPos), normalize(fragNormal));
+                float factor = dot(normalize(viewDir), normalize(fragNormal));
+                float scaledFactor = floor(factor * numEdges) / numEdges;
+
+                //gl_FragColor = vec4(viewDir, 1);
+                gl_FragColor = textureCube(skybox, fragNormal);
+                gl_FragColor *= scaledFactor;
+            }
+        </script>          
+		<script src="../js/three.js"></script>
+        <script src="../js/OBJLoader.js"></script>
+		<script>
+            var scene = new THREE.Scene();
+            scene.background = new THREE.CubeTextureLoader()
+            .setPath( '../assets/cubemaps/sea/' )
+            .load( [
+                'right.jpg',
+                'left.jpg',
+                'top.jpg',
+                'bottom.jpg',
+                'front.jpg',
+                'back.jpg'
+            ]);            
+            console.log(scene.background);
+			var camera = new THREE.PerspectiveCamera( 75, window.innerWidth/window.innerHeight, 0.1, 1000 );
+
+			var renderer = new THREE.WebGLRenderer();
+			renderer.setSize( window.innerWidth, window.innerHeight );
+			document.body.appendChild( renderer.domElement );
+
+            var geometry = new THREE.BoxGeometry();
+            var material = new THREE.ShaderMaterial( {
+                uniforms: {
+                    time: { value: 1.0 },
+                    resolution: { value: new THREE.Vector2() },
+                    skybox: {value: scene.background},
+                    cameraModel: {value: camera.matrix}
+                },
+                vertexShader: document.getElementById( 'vertexShader' ).textContent,
+                fragmentShader: document.getElementById( 'fragmentShader' ).textContent
+            } );
+            
+			// var cube = new THREE.Mesh( geometry, material );
+			// scene.add( cube );
+            var objLoader = new THREE.OBJLoader();
+            objLoader.load('../assets/teapot.obj', (source) => {
+                source.children[0].material = material;
+                scene.add(source.children[0]);
+            });
+
+            camera.position.z = 3;
+            camera.position.y = 1;
+            camera.position.x = 1;
+            camera.lookAt(new THREE.Vector3(0,0,0));
+
+			var animate = function () {
+                requestAnimationFrame( animate );
+                
+				renderer.render( scene, camera );
+            };
+            
+
+            document.onmousemove = function (event) {
+                var x = event.clientX / document.body.clientWidth;
+                var y = event.clientY / document.body.clientHeight;
+                
+                var x = Math.cos((x * 3.14)) * 3;
+                var z = Math.sin((y * 3.14)) * 3;
+                
+                camera.position.x = x;
+                // camera.position.z = z;
+                camera.lookAt(new THREE.Vector3(0,0,0));
+                
+                material.uniforms.cameraModel.value=camera.matrix;
+                material.uniformsNeedUpdate=true;
+
+                modelMaterial.uniforms.lightPos.value = lightPos;
+                modelMaterial.uniformsNeedUpdate=true;
+            }
+			animate();
+		</script>
+	</body>
+</html>
