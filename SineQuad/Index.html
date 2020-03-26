@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>My first three.js app</title>
+		<style>
+			body { margin: 0; }
+			canvas { display: block; }
+		</style>
+	</head>
+	<body>
+        <script id="vertexShader" type="x-shader/x-vertex">
+            //Built in uniforms:
+            //uniform mat4 modelMatrix;
+            //uniform mat4 modelViewMatrix;
+            //uniform mat4 projectionMatrix;
+            //uniform mat4 viewMatrix;
+            //uniform mat3 normalMatrix;
+            //uniform vec3 cameraPosition
+
+            //Vertex attributes
+            //attribute vec3 position;
+            //attribute vec3 normal;
+            //attribute vec2 uv; 
+            uniform vec2 focus;           
+            uniform float force;           
+            uniform float forceScale;           
+            void main()	{
+                vec3 localPos = position;
+                float dist = 1.0 - min(1.0, length(focus - position.xy)*0.5);
+                dist *= force*10.0;
+                localPos.z -= dist;
+                localPos.z += force*forceScale;
+                //localPos.y += sin(position.x + force*0.1)*force;
+                mat4 mvp = projectionMatrix * modelViewMatrix  * modelMatrix ;
+                gl_Position = mvp * vec4( localPos, 1.0);
+            }
+        </script>
+    
+        <script id="fragmentShader" type="x-shader/x-fragment">
+            //Frag attributes
+            //attribute vec3 color;
+            //uniform mat4 viewMatrix;
+            //uniform vec3 cameraPosition;            
+            uniform vec3 color;
+            void main()	{
+                gl_FragColor = vec4(color, 0.333);
+            }
+        </script>          
+		<script src="../js/three.js"></script>
+		<script>
+            var startTime = Date.now();
+			var scene = new THREE.Scene();
+			var camera = new THREE.PerspectiveCamera( 75, window.innerWidth/window.innerHeight, 0.1, 1000 );
+
+			var renderer = new THREE.WebGLRenderer({premultipliedAlpha:false});
+			renderer.setSize( window.innerWidth, window.innerHeight );
+			document.body.appendChild( renderer.domElement );
+
+            var rgeometry = new THREE.PlaneGeometry(5, 5, 35,35);
+            var rmaterial = new THREE.ShaderMaterial( {
+                opacity: 0.333,
+                transparent:true,
+                side: THREE.DoubleSide,
+                uniforms: {
+                    focus: { value: new THREE.Vector2(0,0) },
+                    force: {value: 0},
+                    color: {value: new THREE.Vector3(1,0,0)},
+                    forceScale: {value:1}
+                },
+                vertexShader: document.getElementById( 'vertexShader' ).textContent,
+                fragmentShader: document.getElementById( 'fragmentShader' ).textContent
+            } );
+			var rplane = new THREE.Mesh( rgeometry, rmaterial );
+            scene.add( rplane );
+
+            var dummyMaterial = new THREE.MeshBasicMaterial()
+            var dummyGeometry = new THREE.PlaneGeometry(100, 100, 1,1);
+			var dummyPlane = new THREE.Mesh( dummyGeometry, dummyMaterial );
+
+			camera.position.z = 5;
+
+            
+            
+            var isDragging=false;
+            var mousePos, prevMousePos;
+            var focus=new THREE.Vector2(0,0);
+            var force=0;
+            var raycaster = new THREE.Raycaster();
+            function SetFocus(){
+                if(mousePos) {
+                    var mouse = new THREE.Vector2();
+                    mouse.x = ( mousePos[0] / window.innerWidth ) * 2 - 1;
+                    mouse.y = - ( mousePos[1] / window.innerHeight ) * 2 + 1;
+                    
+                    if(prevMousePos) {
+                        var prevMouse = new THREE.Vector2();
+                        prevMouse.x = ( prevMousePos[0] / window.innerWidth ) * 2 - 1;
+                        prevMouse.y = - ( prevMousePos[1] / window.innerHeight ) * 2 + 1;
+                        var dist = mouse.distanceTo(prevMouse);
+                        if(dist > 0.01  ) {
+                            force=dist;
+                        } else {
+                            force = Math.max(0, force-0.0005);
+                        }
+                    }
+
+                    raycaster.setFromCamera( mouse, camera );
+                    var intersects = raycaster.intersectObject( dummyPlane);
+                    for ( var i = 0; i < intersects.length; i++ ) {
+                        focus = new THREE.Vector2(intersects[i].point.x,intersects[i].point.y);
+                    }       
+                    
+                    prevMousePos = mousePos;
+                }
+            }
+            
+			var animate = function () {
+                var elapsedMilliseconds = Date.now() - startTime;
+                var elapsedSeconds = elapsedMilliseconds / 1000.;
+                SetFocus();
+                
+                rmaterial.uniforms.focus.value = focus;
+                rmaterial.uniforms.force.value = force;
+
+				requestAnimationFrame( animate );
+
+				renderer.render( scene, camera );
+			};
+
+
+            document.onmousedown = function(){
+                isDragging=true;
+            }
+            
+            document.onmouseup = function(){
+                prevMousePos=undefined;
+                isDragging=false;
+            }
+            document.onmousemove = function(event){
+                mousePos = [event.clientX, event.clientY]
+            }
+
+			animate();
+		</script>
+	</body>
+</html>

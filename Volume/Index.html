@@ -45,9 +45,14 @@
             void main()	{
                 float vfront = texture2D(front, vUv).x;
                 float vback = texture2D(back, vUv).x;
-                float diff = smoothstep(0.0, 2.0, max(0.1, vback - vfront));
-                //gl_FragColor = vec4(diff,diff,diff, 1.0);
+                //float diff = smoothstep(0.0, 2.0, max(0.1, vback - vfront));
+                float diff = vback - vfront;
+                //<!-- if(diff<0.0 ) gl_FragColor=vec4(1,0,0,1); -->
+                //else 
                 gl_FragColor = vec4(diff,diff,diff, 1.0);
+
+                //gl_FragColor = vec4(diff,diff,diff, 1.0);
+                //gl_FragColor = vec4(vback*0.1,vback*0.1,vback*0.1, 1.0);
             }
         </script>       
 
@@ -221,7 +226,7 @@
                 // console.log(frontBuffer.texture);
                 
                 var geometry = new THREE.BoxGeometry();
-                // var material = new THREE.MeshBasicMaterial( { color: 0x00ff00,side: THREE.DoubleSide} );
+                // var material = new THREE.MeshPhongMaterial( { color: 0x00ff00,side: THREE.DoubleSide} );
                 var material = new THREE.ShaderMaterial( {
                     uniforms: {
                         time: {value: 0}
@@ -259,13 +264,13 @@
             
             {
                 var light = new THREE.PointLight( 0xffffff, 1, 100 );
-                light.position.set( 10, 10, 10 );
+                light.position.set( 0, 0, 10 );
                 bufferScene.add( light );
             }
 
-			camera.position.z = 2;
+			camera.position.z = 1.5;
 			camera.position.x = 0;
-			camera.position.y = 1;
+			camera.position.y = 0.5;
             camera.lookAt(0,0.5,0);
 
             console.log(backBuffer);
@@ -304,7 +309,7 @@
                     renderer.setRenderTarget(frontBuffer);
                     renderer.render(bufferScene, camera);
                     
-                    volume.material.side = THREE.DoubleSide;
+                    volume.material.side = THREE.BackSide;
                     renderer.setRenderTarget(null);
                     renderer.render( scene, camera);                
                 }

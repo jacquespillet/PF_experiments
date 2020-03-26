@@ -22,8 +22,8 @@
             var raycaster = new THREE.Raycaster();
             camera.position.z = 5;
 
-            var sizeX = 10;
-            var sizeY = 10;
+            var sizeX = 40  ;
+            var sizeY = 40  ;
             var width=10;
             var height=10;
             var plane;
@@ -64,12 +64,22 @@
                 [new THREE.Vector2(1, 1), cellHyp],
                 [new THREE.Vector2(-1, -1), cellHyp],
                 [new THREE.Vector2(1, -1), cellHyp],
+                
+                [new THREE.Vector2(0, -2), cellWidth*2],
+                [new THREE.Vector2(0,  2), cellWidth*2],
+                [new THREE.Vector2(2,  0), cellWidth*2],
+                [new THREE.Vector2(0,  2), cellWidth*2],
+                
+                [new THREE.Vector2(-2, -2), cellHyp*2],
+                [new THREE.Vector2(2,  -2), cellHyp*2],
+                [new THREE.Vector2(-2,  2), cellHyp*2],
+                [new THREE.Vector2(2,  2), cellHyp*2],
             ]
             
             var isDragging=false;
             var mousePos, prevMousePos;
             var hitPosition;
-            var radius=5;
+            var radius=10;
             
 			var animate = function () {
                 if(plane!=undefined) {
@@ -81,15 +91,21 @@
                             var dispx = Math.min((mousePos[0] - prevMousePos[0])*0.001, 2);
                             var dispy = Math.min((mousePos[1] - prevMousePos[1])*0.001, 2);
                             var array =plane.geometry.attributes.position.array;
+                            
                             var x = Math.floor(hitPosition.x * sizeX);
                             var y = Math.floor(hitPosition.y * sizeY);
 
                             for(var dy=y-radius; dy<y+radius; dy++) {
-                                for(var dx=y-radius; dx<y+radius; dx++) {
-                                    if(dx >= 0 && dx <= sizeX && dy >= 0 && dy <= sizeY) {
-                                        var inx = (y * (sizeX+1) + x) * 3;
-                                        array[inx] += dispx
-                                        array[inx+1] -= dispy
+                                for(var dx=x-radius; dx<x+radius; dx++) {
+                                    var lx = dx-x;
+                                    var ly = dy-y;
+                                    if(lx*lx+ly*ly < radius*radius) {
+                                        if(dx >= 0 && dx <= sizeX && dy >= 0 && dy <= sizeY) {
+                                            var factor = radius - (lx*lx+ly*ly) * 0.1;
+                                            var inx = (dy * (sizeX+1) + dx) * 3;
+                                            array[inx] += factor* dispx
+                                            array[inx+1] -= factor* dispy
+                                        }
                                     }
                                 }
                             }
@@ -117,8 +133,8 @@
                                     var length = springVector.length();
                                     var undeformedLength = neighbourLUT[i][1];
                                     var forceScaler = (length - undeformedLength) / undeformedLength;
-                                    forceScaler = Math.min(1, forceScaler);
-                                    var forceVector = springVector.clone().multiplyScalar(forceScaler*0.1);
+                                    // forceScaler = Math.min(1, forceScaler);
+                                    var forceVector = springVector.clone().multiplyScalar(forceScaler*0.01);
                                     movementVector.add(forceVector);
                                 }
                             }
