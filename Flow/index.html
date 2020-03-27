@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>My first three.js app</title>
+		<style>
+			body { margin: 0; }
+			canvas { display: block; }
+		</style>
+	</head>
+	<body>
+        <script src="../js/three.js"></script>
+        <script type="text/javascript" src="../js/dat.gui.min.js"></script>        
+        <script src="../js/OBJLoader.js"></script>
+        <script id="vertexShader" type="x-shader/x-vertex">
+            //Built in uniforms:
+            //uniform mat4 modelMatrix;
+            //uniform mat4 modelViewMatrix;
+            //uniform mat4 projectionMatrix;
+            //uniform mat4 viewMatrix;
+            //uniform mat3 normalMatrix;
+            //uniform vec3 cameraPosition
+
+            //Vertex attributes
+            //attribute vec3 position;
+            //attribute vec3 normal;
+            //attribute vec2 uv;     
+
+            uniform float time;
+            uniform float frequency;
+            uniform float noiseStrength;
+            uniform float noiseSpeed;
+            uniform vec2 offset;
+
+            uniform float waveLength;
+            uniform float amplitude;
+            uniform float speed;
+            uniform vec2 direction;
+            uniform float q;
+
+
+            struct Noise {
+                float value;
+                vec4 derivative;
+            };
+
+                    
+            vec3 random3(vec3 st){
+                st = vec3( dot(st,vec3(127.1,311.7, 69.4)),
+                        dot(st,vec3(269.5,183.3, 103.2)), 
+                        dot(st,vec3(301.5,241.6, 123.2)));
+                return -1.0 + 2.0*fract(sin(st)*43758.5453123);
+            }
+                    
+            vec2 random2(vec2 st){
+                st = vec2( dot(st,vec2(311.7, 69.4)),
+                        dot(st,vec2(183.3, 103.2)));
+                return -1.0 + 2.0*fract(sin(st)*43758.5453123);
+            }
+
+            void interpolant5(float inT, out float t, out float dt) {
+                t  = 6.0 * inT * inT * inT * inT * inT - 15.0 * inT * inT * inT * inT + 10.0 * inT * inT * inT;
+                dt = 30.0 * inT * inT * inT * inT - 60.0  * inT * inT * inT + 30.0  * inT * inT;
+            }
+
+            Noise PerlinNoise3D(vec3 pos, float _frequency) {
+                Noise ret;
+                float retVal=0.0;
+                vec4 retDer = vec4(0, 0, 0, 0);
+        
+                pos = pos * _frequency;
+                pos.xy+=offset;
+
+                vec3 fPart = fract(pos);
+                vec3 iPart = floor(pos);
+        
+                //Front
+                vec3 v0 = random3(iPart +vec3(0, 0, 0));
+                vec3 v1 = random3(iPart +vec3(1, 0, 0));
+                vec3 v2 = random3(iPart +vec3(0, 1, 0));
+                vec3 v3 = random3(iPart +vec3(1, 1, 0));
+                
+                vec3 v4 = random3(iPart +vec3(0, 0, 1));
+                vec3 v5 = random3(iPart +vec3(1, 0, 1));
+                vec3 v6 = random3(iPart +vec3(0, 1, 1));
+                vec3 v7 = random3(iPart +vec3(1, 1, 1));
+        
+                float n0 = dot(v0, fPart - vec3(0, 0, 0));
+                float n1 = dot(v1, fPart - vec3(1, 0, 0));
+                float n2 = dot(v2, fPart - vec3(0, 1, 0));
+                float n3 = dot(v3, fPart - vec3(1, 1, 0));        
+                float n4 = dot(v4, fPart - vec3(0, 0, 1));
+                float n5 = dot(v5, fPart - vec3(1, 0, 1));
+                float n6 = dot(v6, fPart - vec3(0, 1, 1));
+                float n7 = dot(v7, fPart - vec3(1, 1, 1));        
+        
+                vec3 t = vec3(0,0,0);
+                vec3 dt = vec3(1,1,1);
+                interpolant5(fPart.x, t.x, dt.x);
+                interpolant5(fPart.y, t.y, dt.y);
+                interpolant5(fPart.z, t.z, dt.z);
+                
+                float a = n0;
+                
+                float b = n1 - n0;
+                float c = n2 - n0;
+                float d = n4 - n0;
+        
+                float e = n0 - n1 - n2 + n3;
+                float f = n0 - n1 - n4 + n5;
+                float g = n0 - n2 - n4 + n6;
+        
+                float h = -n0 + n1 + n2 - n3 + n4 - n5 - n6 + n7;
+        
+                vec3 da = v0;
+                
+                vec3 db = v1 - v0;
+                vec3 dc = v2 - v0;
+                vec3 dd = v4 - v0;
+        
+                vec3 de = v0 - v1 - v2 + v3;
+                vec3 df = v0 - v1 - v4 + v5;
+                vec3 dg = v0 - v2 - v4 + v6;
+        
+                vec3 dh = -v0 + v1 + v2 - v3 + v4 - v5 - v6 + v7;
+                
+        
+                retVal = a + b * t.x + c * t.y + d * t.z + 
+                         e * t.x * t.y + 
+                         f * t.x * t.z + 
+                         g * t.y * t.z + 
+                         h * t.x * t.y * t.z; 
+                
+                retDer.xyz = da + db * t.x + (dc + de * t.x) * t.y + (dd + df * t.x + (dg + dh * t.x) * t.y) * t.z;
+                retDer.x += (b + e * t.y + (f + h * t.y) * t.z) * dt.x;
+                retDer.y += (c + e * t.x + (g + h * t.x) * t.z) * dt.y;
+                retDer.z += (d + f * t.x + (g + h * t.x) * t.y) * dt.z;        
+        
+                ret.value = retVal * 0.5 + 0.5;
+                ret.derivative = normalize(retDer);
+                return ret;
+            }
+
+            #define OCTAVES 6
+            Noise fbm (vec3 st) {
+                Noise n;
+                float amplitude = 1.0;
+                float lfrequency = frequency;
+
+                for (int i = 0; i < OCTAVES; i++) {
+                    Noise _n = PerlinNoise3D(st, lfrequency); 
+                    n.value += amplitude * _n.value;
+                    n.derivative += amplitude * _n.derivative;
+                    
+                    lfrequency *= 2.;
+                    amplitude *= .5;
+                }
+                return n;
+            }
+
+            #define NUM_WAVES 8
+            vec3 GetGertsnerWave(vec3 pos, float _waveLength, float _amplitude, float _speed, vec2 _direction, float _q,  out vec3 normal) {
+                float Qi = _q / (_waveLength * _amplitude * float(NUM_WAVES));
+        
+                vec3 ret = pos;
+        
+                float dotTerm = dot(_direction, pos.xz);
+                ret.y = _amplitude * sin(_waveLength * dotTerm + time * _speed);
+        
+                ret.x = (Qi * _amplitude * _direction.x * cos(_waveLength * dotTerm + time*_speed));
+                ret.z = (Qi * _amplitude * _direction.y * cos(_waveLength * dotTerm + time*_speed));
+        
+                float wa = _waveLength * _amplitude;
+                float S = sin(_waveLength * dotTerm + time*_speed);
+                float C = cos(_waveLength * dotTerm + time*_speed);
+        
+                normal = vec3(0, 0, 0);
+                normal.x = _direction.x * wa * C;
+                normal.z = _direction.y * wa * C;
+                normal.y =  (Qi * wa * S);
+                // normal = normal;
+        
+                return ret;
+            }
+                    
+            varying vec2 vUv;
+            varying vec3 vNormal;
+            varying vec3 vPosition;
+            void main()	{
+                vPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+
+                vec3 wavePosition = vPosition;
+                vec3 waveNormal = vec3(0,1,0);
+
+                float _waveLength=waveLength;
+                float _amplitude=amplitude;
+                float _speed=speed;
+                vec2 _direction=direction;
+                float _q=q;
+                for(int i=0; i<NUM_WAVES; i++) {
+                    vec3 lwaveNormal;
+                    vec3 lwavePos = GetGertsnerWave(vPosition, waveLength, amplitude, speed, direction, q, lwaveNormal); 
+                    wavePosition += lwavePos.xyz;
+                    waveNormal -= lwaveNormal.xyz;
+                    
+                    _waveLength *= 1.1;
+                    _direction = normalize((2.0 * random2(direction*direction*direction) - 1.0));
+                    _amplitude *= 0.6;
+                    _speed *= 1.2;
+                    _q *= 1.2;
+    
+                }
+
+                vec3 newPosition = wavePosition;
+                vNormal=normalize(waveNormal);
+
+                Noise n = fbm(vec3(uv, time*noiseSpeed));
+                newPosition.y += n.value*noiseStrength;
+                newPosition.y -= noiseStrength;
+
+                vNormal += normalize(vec3(-n.derivative.x,1,-n.derivative.y)*noiseStrength);
+                vNormal = normalize(vNormal);
+                
+                
+                vPosition = (modelMatrix * vec4(newPosition, 1.0)).xyz;
+                vUv = uv;
+                mat4 mvp = projectionMatrix * modelViewMatrix  * modelMatrix ;
+                gl_Position = mvp * vec4( newPosition, 1.0 );
+            }
+        </script>
+        
+        <script id="fragmentShader" type="x-shader/x-fragment">
+            //Frag attributes
+            //attribute vec3 color;
+            //uniform mat4 viewMatrix;
+            //uniform vec3 cameraPosition;          
+            
+            const vec3 lightPos = vec3(100, 50, 0);
+
+            varying vec2 vUv;
+            varying vec3 vNormal;
+            varying vec3 vPosition;
+
+            uniform float shininess;
+            void main()	{
+                vec3 localNormal = normalize(vNormal);
+                vec3 fragToLight = normalize(lightPos - vPosition);
+                vec3 fragToEye   = normalize(cameraPosition   - vPosition);
+        
+                float NDotL = dot(localNormal, fragToLight);
+                float diffuseIntensity = clamp(NDotL, 0.0, 1.0);
+                vec3 halfVec = normalize(fragToLight + fragToEye);
+                float NDotH = dot(localNormal, halfVec);
+                float specularIntensity = pow(clamp(NDotH, 0.0, 1.0), shininess);
+                
+                gl_FragColor = vec4(1,1,1,1) * diffuseIntensity;
+                gl_FragColor = vec4(0.2, 0.2, 0.2, 1) + diffuseIntensity * vec4(1.0, 1.0, 1.0,1.0) + specularIntensity * vec4(1.0, 1.0, 1.0,1.0);
+            }
+        </script>       
+		<script>
+            startTime = Date.now();
+			var camera = new THREE.PerspectiveCamera( 75, window.innerWidth/window.innerHeight, 0.1, 1000 );
+            console.log(camera);
+			var renderer = new THREE.WebGLRenderer();
+
+            // Creating a GUI and a subfolder.
+            var gui = new dat.GUI();
+            var folder1 = gui.addFolder('Waves');
+            var waveParameters = {
+                waveLength : 0.5,
+                amplitude  : 0.1,
+                speed  :  1.5,
+                directionX:1,
+                directionY:1,
+                q : 0.2,
+            };
+
+            folder1.add(waveParameters, 'waveLength', 0.01, 2);
+            folder1.add(waveParameters, 'amplitude', 0.01, 3);
+            folder1.add(waveParameters, 'speed', 0.01, 2);
+            folder1.add(waveParameters, 'directionX', -1, 1);
+            folder1.add(waveParameters, 'directionY', -1, 1);
+            folder1.add(waveParameters, 'q', 0.01, 0.99);
+
+            
+            var folder2 = gui.addFolder('Noise');
+            var noiseParameters = {strength: 10, frequency: 4, speed:0.01};
+            folder2.add(noiseParameters, 'strength', 0.01, 20);
+            folder2.add(noiseParameters, 'frequency', 0.01, 10);
+            folder2.add(noiseParameters, 'speed', 0, 0.5);
+			
+            var folder3 = gui.addFolder('Appearance');
+            var appearanceParameters = {shininess: 8};
+            folder3.add(appearanceParameters, 'shininess', 0, 64);
+
+            
+            renderer.setSize( window.innerWidth, window.innerHeight );
+			document.body.appendChild( renderer.domElement );
+
+            var size=1024;
+            var plane, planeShader;
+            {
+                var scene = new THREE.Scene();            
+                var geometry = new THREE.PlaneBufferGeometry(100, 100, size-1, size-1);            
+                
+                var material = new THREE.ShaderMaterial( {
+                    uniforms: {
+                        time: { value: 1.0 },
+                        frequency: { value: noiseParameters.frequency },
+                        noiseStrength: { value: noiseParameters.strength },
+                        noiseSpeed: { value: noiseParameters.speed },
+                        waveLength: { value: waveParameters.waveLength },
+                        amplitude: { value: waveParameters.amplitude },
+                        speed: { value: waveParameters.speed },
+                        direction: { value: new THREE.Vector2(waveParameters.directionX,waveParameters.directionY) },
+                        q: { value: waveParameters.q },
+                        shininess: { value: appearanceParameters.shininess },
+                    },
+                    vertexShader: document.getElementById( 'vertexShader' ).textContent,
+                    fragmentShader: document.getElementById( 'fragmentShader' ).textContent,
+                    side:THREE.DoubleSide
+                } );
+
+                plane = new THREE.Mesh( geometry, material );
+                plane.rotation.x=-3.14*0.25;
+                scene.add( plane );
+            }
+            
+            {
+                var light = new THREE.DirectionalLight( 0xffffff, 0.7 );
+                light.position = new THREE.Vector3(0, 10, 0);
+                light.target = plane
+                scene.add( light );
+            }
+
+			camera.position.z = 5;
+			camera.position.x = 0;
+			camera.position.y = 25;
+            camera.lookAt(0,0,0);
+
+            console.log(plane.geometry);
+
+            function SetUniforms() {
+                plane.material.uniforms.frequency.value = noiseParameters.frequency;
+                plane.material.uniforms.noiseStrength.value = noiseParameters.strength;
+                plane.material.uniforms.noiseSpeed.value = noiseParameters.speed;
+                plane.material.uniforms.waveLength.value = waveParameters.waveLength ;
+                plane.material.uniforms.amplitude.value = waveParameters.amplitude ;
+                plane.material.uniforms.speed.value = waveParameters.speed ;
+                plane.material.uniforms.direction.value = new THREE.Vector2(waveParameters.directionX,waveParameters.directionY) ;
+                plane.material.uniforms.q.value = waveParameters.q;
+                plane.material.uniforms.shininess.value = appearanceParameters.shininess;
+            }
+
+			var animate = function () {
+                SetUniforms();
+
+                var elapsedMilliseconds = Date.now() - startTime;
+                var elapsedSeconds = elapsedMilliseconds / 1000.;
+
+                requestAnimationFrame( animate );
+
+                plane.material.uniforms.time.value = elapsedSeconds;
+                
+
+                // camera.position.z = Math.sin(elapsedSeconds*0.1)*25;
+                // camera.position.x = Math.cos(elapsedSeconds*0.1)*25;
+                // camera.position.y = Math.cos(elapsedSeconds*0.1)*5+10;
+                // camera.lookAt(0,0,0);                
+                
+                
+                renderer.setRenderTarget(null);
+                renderer.render( scene, camera);
+			};
+
+			animate();
+		</script>
+	</body>
+</html>

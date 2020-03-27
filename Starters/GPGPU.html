@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>My first three.js app</title>
+		<style>
+			body { margin: 0; }
+			canvas { display: block; }
+		</style>
+	</head>
+	<body>
+        <script src="../js/three.js"></script>
+        <script src="../js/OBJLoader.js"></script>
+        <script id="vertexShader" type="x-shader/x-vertex">
+            //Built in uniforms:
+            //uniform mat4 modelMatrix;
+            //uniform mat4 modelViewMatrix;
+            //uniform mat4 projectionMatrix;
+            //uniform mat4 viewMatrix;
+            //uniform mat3 normalMatrix;
+            //uniform vec3 cameraPosition
+
+            //Vertex attributes
+            //attribute vec3 position;
+            //attribute vec3 normal;
+            //attribute vec2 uv;     
+            
+            varying vec2 vUv;
+            void main()	{
+                vUv = uv;
+                vec2 clipSpace = position.xy*2.0;
+                gl_Position = vec4(clipSpace,0.0, 1.0);
+            }
+        </script>
+        
+        <script id="fragmentShader" type="x-shader/x-fragment">
+            //Frag attributes
+            //attribute vec3 color;
+            //uniform mat4 viewMatrix;
+            //uniform vec3 cameraPosition;          
+            
+            uniform float time;
+            uniform float frequency;
+            uniform vec2 offset;
+
+            struct Noise {
+                float value;
+                vec4 derivative;
+            };
+
+                    
+            vec3 random3(vec3 st){
+                st = vec3( dot(st,vec3(127.1,311.7, 69.4)),
+                        dot(st,vec3(269.5,183.3, 103.2)), 
+                        dot(st,vec3(301.5,241.6, 123.2)));
+                return -1.0 + 2.0*fract(sin(st)*43758.5453123);
+            }
+
+            void interpolant5(float inT, out float t, out float dt) {
+                //t  = 6.0 * inT * inT * inT * inT * inT - 15.0 * inT * inT * inT * inT + 10.0 * inT * inT * inT;
+                //dt = 30.0 * inT * inT * inT * inT - 60.0  * inT * inT * inT + 30.0  * inT * inT;
+                t = step(0.5, t);
+                dt=1.0;
+            }
+
+            Noise PerlinNoise3D(vec3 pos, float _frequency) {
+                Noise ret;
+                float retVal=0.0;
+                vec4 retDer = vec4(0, 0, 0, 0);
+        
+                pos = pos * _frequency;
+                pos.xy+=offset;
+
+                vec3 fPart = fract(pos);
+                vec3 iPart = floor(pos);
+        
+                //Front
+                vec3 v0 = random3(iPart +vec3(0, 0, 0));
+                vec3 v1 = random3(iPart +vec3(1, 0, 0));
+                vec3 v2 = random3(iPart +vec3(0, 1, 0));
+                vec3 v3 = random3(iPart +vec3(1, 1, 0));
+                
+                vec3 v4 = random3(iPart +vec3(0, 0, 1));
+                vec3 v5 = random3(iPart +vec3(1, 0, 1));
+                vec3 v6 = random3(iPart +vec3(0, 1, 1));
+                vec3 v7 = random3(iPart +vec3(1, 1, 1));
+        
+                float n0 = dot(v0, fPart - vec3(0, 0, 0));
+                float n1 = dot(v1, fPart - vec3(1, 0, 0));
+                float n2 = dot(v2, fPart - vec3(0, 1, 0));
+                float n3 = dot(v3, fPart - vec3(1, 1, 0));        
+                float n4 = dot(v4, fPart - vec3(0, 0, 1));
+                float n5 = dot(v5, fPart - vec3(1, 0, 1));
+                float n6 = dot(v6, fPart - vec3(0, 1, 1));
+                float n7 = dot(v7, fPart - vec3(1, 1, 1));        
+        
+                vec3 t = vec3(0,0,0);
+                vec3 dt = vec3(1,1,1);
+                interpolant5(fPart.x, t.x, dt.x);
+                interpolant5(fPart.y, t.y, dt.y);
+                interpolant5(fPart.z, t.z, dt.z);
+                
+                float a = n0;
+                
+                float b = n1 - n0;
+                float c = n2 - n0;
+                float d = n4 - n0;
+        
+                float e = n0 - n1 - n2 + n3;
+                float f = n0 - n1 - n4 + n5;
+                float g = n0 - n2 - n4 + n6;
+        
+                float h = -n0 + n1 + n2 - n3 + n4 - n5 - n6 + n7;
+        
+                vec3 da = v0;
+                
+                vec3 db = v1 - v0;
+                vec3 dc = v2 - v0;
+                vec3 dd = v4 - v0;
+        
+                vec3 de = v0 - v1 - v2 + v3;
+                vec3 df = v0 - v1 - v4 + v5;
+                vec3 dg = v0 - v2 - v4 + v6;
+        
+                vec3 dh = -v0 + v1 + v2 - v3 + v4 - v5 - v6 + v7;
+                
+        
+                retVal = a + b * t.x + c * t.y + d * t.z + 
+                         e * t.x * t.y + 
+                         f * t.x * t.z + 
+                         g * t.y * t.z + 
+                         h * t.x * t.y * t.z; 
+                
+                retDer.xyz = da + db * t.x + (dc + de * t.x) * t.y + (dd + df * t.x + (dg + dh * t.x) * t.y) * t.z;
+                retDer.x += (b + e * t.y + (f + h * t.y) * t.z) * dt.x;
+                retDer.y += (c + e * t.x + (g + h * t.x) * t.z) * dt.y;
+                retDer.z += (d + f * t.x + (g + h * t.x) * t.y) * dt.z;        
+        
+                ret.value = retVal * 0.5 + 0.5;
+                ret.derivative = retDer;
+                return ret;
+            }
+
+            #define OCTAVES 6
+            Noise fbm (vec3 st) {
+                Noise n;
+                float amplitude = 1.0;
+                float lfrequency = frequency;
+
+                for (int i = 0; i < OCTAVES; i++) {
+                    Noise _n = PerlinNoise3D(st, lfrequency); 
+                    n.value += amplitude * _n.value;
+                    n.derivative += _n.derivative;
+                    
+                    lfrequency *= 2.;
+                    amplitude *= .5;
+                }
+                //n.derivative /= 8.0;
+                //n.derivative = normalize(n.derivative);
+                return n;
+            }
+
+           /* #define NUM_WAVES 3
+            float GetGertsnerWave(vec2 pos, float _waveLength, float _amplitude, float _speed, vec2 _direction, float _q,  out vec3 normal) {
+                float Qi = _q / (_waveLength * _amplitude * float(NUM_WAVES));
+        
+                float ret = 0;
+        
+                float dotTerm = dot(_direction, pos.xz);
+                ret  = _amplitude * sin(_waveLength * dotTerm + time * _speed);
+        
+                return ret;
+            }  */          
+            
+
+
+            varying vec2 vUv;
+            void main()	{
+                /*float waveLength = 10;
+                float amplitude = 5;
+                float speed=1;
+                vec2 direction = vec2(0.5, 0.5);
+                float q=0.8;
+                for(int i=0; i<NUM_WAVES; i++) {
+                    vec3 waveNormal;
+                    vec3 wavePos = GetGertsnerWave(newPos.xyz, waveLengths[i], amplitudes[i], speeds[i], directions[i], qs[i], waveNormal); 
+                    newPos += vec4(wavePos, 0);
+                }*/
+                
+                //Noise n = PerlinNoise3D(vec3(vUv, time*0.05), frequency);
+                Noise n = fbm(vec3(vUv, time*0.05));
+                float v = n.value;
+                //gl_FragColor = vec4(n.derivative.xyz, 1.0);
+                gl_FragColor = vec4(n.derivative.xyz, v);
+            }
+        </script>       
+		<script>
+            startTime = Date.now();
+			var camera = new THREE.PerspectiveCamera( 75, window.innerWidth/window.innerHeight, 0.1, 1000 );
+            console.log(camera);
+			var renderer = new THREE.WebGLRenderer();
+
+            var size=512;
+
+			renderer.setSize( window.innerWidth, window.innerHeight );
+			document.body.appendChild( renderer.domElement );
+
+            var backBuffer, plane, bufferScene;
+            {
+                bufferScene = new THREE.Scene();     
+                backBuffer = new THREE.WebGLRenderTarget( size, size, {minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter});
+                backBuffer.texture.type = THREE.FloatType
+                backBuffer.texture.format = THREE.RGBAFormat
+                
+                var geometry = new THREE.PlaneGeometry();
+                var planeMaterial = new THREE.ShaderMaterial( {
+                    uniforms: {
+                        time: {value: 0},
+                        offset: {value: new THREE.Vector2(0,0)},
+                        frequency: {value: 4},
+                    }, 
+                    vertexShader: document.getElementById( 'vertexShader' ).textContent,
+                    fragmentShader: document.getElementById( 'fragmentShader' ).textContent
+                });            
+                renderPlane = new THREE.Mesh( geometry, planeMaterial );
+                bufferScene.add( renderPlane );
+            }
+
+            var plane, planeShader;
+            {
+                var scene = new THREE.Scene();            
+                var geometry = new THREE.PlaneBufferGeometry(50, 50, size-1, size-1);
+                 var material = new THREE.MeshPhongMaterial();
+                //var material = new THREE.MeshBasicMaterial({map:backBuffer.texture});
+
+                plane = new THREE.Mesh( geometry, material );
+                plane.rotation.x=-3.14*0.5;
+                scene.add( plane );
+            }
+            
+            {
+                var light = new THREE.DirectionalLight( 0xffffff, 0.7 );
+                light.position = new THREE.Vector3(0, 10, 0);
+                light.target = plane
+                scene.add( light );
+            }
+
+			camera.position.z = 0;
+			camera.position.x = 0;
+			camera.position.y = 10;
+            camera.lookAt(0,0,5);
+
+            console.log(plane.geometry);
+
+			var animate = function () {
+                var elapsedMilliseconds = Date.now() - startTime;
+                var elapsedSeconds = elapsedMilliseconds / 1000.;
+
+                requestAnimationFrame( animate );
+                
+
+                camera.position.z = Math.sin(elapsedSeconds*0.1)*25;
+                camera.position.x = Math.cos(elapsedSeconds*0.1)*25;
+                camera.position.y = Math.cos(elapsedSeconds*0.1)*5+10;
+                camera.lookAt(0,0,0);                
+
+                //Perlin noise render target
+                const noiseArray = new Float32Array(size*size*4);
+                {
+                    planeMaterial.uniforms.time.value = elapsedSeconds*0.1;
+                    // planeMaterial.uniforms.frequency.value = (Math.cos(elapsedSeconds*0.1)+1) * 5 + 3
+                    planeMaterial.uniforms.offset.value = new THREE.Vector2(elapsedSeconds*0.5,0);
+                    renderer.setRenderTarget(backBuffer);
+                    renderer.render(bufferScene, camera);                
+                    renderer.readRenderTargetPixels ( backBuffer, 0, 0, size, size, noiseArray);
+                }
+
+                var scaler = 5;
+                for(var i=0; i<plane.geometry.attributes.position.count; i++) {
+                    var inx = i*3;
+                    var noiseInx = i*4;
+
+                    var noiseVal = noiseArray[noiseInx+3]
+                    plane.geometry.attributes.position.array[inx+2] = noiseVal * scaler - scaler*0.5
+                    
+                    plane.geometry.attributes.normal.array[inx] = -noiseArray[noiseInx]
+                    plane.geometry.attributes.normal.array[inx+1] = -noiseArray[noiseInx+1]
+                    plane.geometry.attributes.normal.array[inx+2] = 1 - noiseArray[noiseInx+2]
+
+
+                }
+                plane.geometry.computeVertexNormals () 
+                plane.geometry.attributes.position.needsUpdate = true;
+                
+                renderer.setRenderTarget(null);
+                renderer.render( scene, camera);
+			};
+
+			animate();
+		</script>
+	</body>
+</html>
