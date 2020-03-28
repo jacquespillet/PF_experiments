@@ -243,6 +243,15 @@
                 light.position = new THREE.Vector3(0, 10, 0);
                 light.target = plane
                 scene.add( light );
+
+                var light = new THREE.PointLight( 0xff0000, 1, 100 );
+                light.position.set(10, 5,0);
+                scene.add( light );
+
+                var light = new THREE.PointLight( 0x0000ff, 1, 100 );
+                light.position.set(-10, 5,0);
+                scene.add( light );
+                
             }
 
 			camera.position.z = 0;

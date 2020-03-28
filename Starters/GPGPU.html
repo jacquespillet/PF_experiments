@@ -141,57 +141,15 @@
                 return ret;
             }
 
-            #define OCTAVES 6
-            Noise fbm (vec3 st) {
-                Noise n;
-                float amplitude = 1.0;
-                float lfrequency = frequency;
-
-                for (int i = 0; i < OCTAVES; i++) {
-                    Noise _n = PerlinNoise3D(st, lfrequency); 
-                    n.value += amplitude * _n.value;
-                    n.derivative += _n.derivative;
-                    
-                    lfrequency *= 2.;
-                    amplitude *= .5;
-                }
-                //n.derivative /= 8.0;
-                //n.derivative = normalize(n.derivative);
-                return n;
-            }
-
-           /* #define NUM_WAVES 3
-            float GetGertsnerWave(vec2 pos, float _waveLength, float _amplitude, float _speed, vec2 _direction, float _q,  out vec3 normal) {
-                float Qi = _q / (_waveLength * _amplitude * float(NUM_WAVES));
-        
-                float ret = 0;
-        
-                float dotTerm = dot(_direction, pos.xz);
-                ret  = _amplitude * sin(_waveLength * dotTerm + time * _speed);
-        
-                return ret;
-            }  */          
-            
-
 
             varying vec2 vUv;
             void main()	{
-                /*float waveLength = 10;
-                float amplitude = 5;
-                float speed=1;
-                vec2 direction = vec2(0.5, 0.5);
-                float q=0.8;
-                for(int i=0; i<NUM_WAVES; i++) {
-                    vec3 waveNormal;
-                    vec3 wavePos = GetGertsnerWave(newPos.xyz, waveLengths[i], amplitudes[i], speeds[i], directions[i], qs[i], waveNormal); 
-                    newPos += vec4(wavePos, 0);
-                }*/
-                
                 //Noise n = PerlinNoise3D(vec3(vUv, time*0.05), frequency);
-                Noise n = fbm(vec3(vUv, time*0.05));
-                float v = n.value;
+                //Noise n = fbm(vec3(vUv, time*0.05));
+                //float v = n.value;
                 //gl_FragColor = vec4(n.derivative.xyz, 1.0);
-                gl_FragColor = vec4(n.derivative.xyz, v);
+                //gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+                gl_FragColor = vec4(vUv, 0.0, 1.0);
             }
         </script>       
 		<script>
@@ -217,7 +175,7 @@
                     uniforms: {
                         time: {value: 0},
                         offset: {value: new THREE.Vector2(0,0)},
-                        frequency: {value: 4},
+                        frequency: {value: 10},
                     }, 
                     vertexShader: document.getElementById( 'vertexShader' ).textContent,
                     fragmentShader: document.getElementById( 'fragmentShader' ).textContent
