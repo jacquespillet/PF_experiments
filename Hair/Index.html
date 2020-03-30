@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>My first three.js app</title>
+		<style>
+			body { margin: 0; }
+			canvas { display: block; }
+		</style>
+	</head>
+	<body>
+		<script src="../js/three.js"></script>
+        <script type="text/javascript" src="../js/dat.gui.min.js"></script>        
+        <script id="vertexShader" type="x-shader/x-vertex">
+            varying vec2 vUv;
+            void main()	{
+                vUv = uv;
+                vec2 clipSpace = position.xy*2.0;
+                gl_Position = vec4(clipSpace,0.0, 1.0);
+            }
+        </script>
+        
+        <script id="fragmentShader" type="x-shader/x-fragment">
+            uniform sampler2D inputTex;
+            varying vec2 vUv;
+            void main()	{
+                vec4 res = texture2D(inputTex, vUv);
+                gl_FragColor=res - vec4(0, 0.01, 0,0);
+            }
+        </script>         
+
+        <script>
+            var gui = new dat.GUI();
+            var folder1 = gui.addFolder('Controls');
+            var controls = {
+                stiffness : 10,
+                damping  : 0.8,
+                numHair: 30,
+                hairLength: 3,
+                subdiv: 5,
+                gravityX: 0,
+                gravityY: 1,
+                gravityZ: 0,
+                radius: 0.25,
+            };
+
+            radiusController = folder1.add(controls, 'radius', 0.1, 3);
+            stiffnessController = folder1.add(controls, 'stiffness', 1, 15);
+            dampingController = folder1.add(controls, 'damping', 0.5, 0.9);
+            var numHairController = folder1.add(controls, 'numHair', 1, 100);
+            var subdivController = folder1.add(controls, 'subdiv', 1, 10);
+            var hairLengthController = folder1.add(controls, 'hairLength', 0.1, 3);
+            var gravityXController = folder1.add(controls, 'gravityX', 0, 1);
+            var gravityYController = folder1.add(controls, 'gravityY', 0, 1);
+            var gravityZController = folder1.add(controls, 'gravityZ', 0, 1);
+
+
+            var numHair = 10;
+            var subdiv=5;
+            var hairLength=0.5;
+            var gravity=new THREE.Vector3(0,0.01,0)
+            var red = 0;
+            var green=0;
+            var blue = 1;
+
+            radiusController.onChange(function() {
+                Init();
+                isDragging=false;
+            })
+
+            stiffnessController.onChange(function() {
+                isDragging=false;
+            })
+            dampingController.onChange(function() {
+                isDragging=false;
+            })
+            
+            gravityXController.onChange(function() {
+                gravity.x = controls.gravityX;
+                gravity.setLength(0.01);
+                isDragging=false;
+            })
+            
+            gravityYController.onChange(function() {
+                gravity.y = controls.gravityY;
+                gravity.setLength(0.01);
+                isDragging=false;
+            })
+            
+            gravityZController.onChange(function() {
+                gravity.z = controls.gravityZ;
+                gravity.setLength(0.01);
+                isDragging=false;
+            })
+            
+            numHairController.onChange(function() {
+                isDragging=false;
+                // renderer.clear();
+                numHair = controls.numHair;
+                Init();
+            });
+            
+            subdivController.onChange(function() {
+                isDragging=false;
+                // renderer.clear();
+                subdiv = controls.subdiv;
+                Init();
+            });
+            
+            hairLengthController.onChange(function() {
+                isDragging=false;
+                // renderer.clear();
+                hairLength = controls.hairLength;
+                Init();
+            });
+
+            var material = new THREE.LineBasicMaterial( { color: 0x0000ff } );
+
+
+			var scene = new THREE.Scene();
+			var camera = new THREE.PerspectiveCamera( 75, window.innerWidth/window.innerHeight, 0.1, 1000 );
+
+			var renderer = new THREE.WebGLRenderer({antialias: true, preserveDrawingBuffer: true, autoClear:false});
+			renderer.setSize( window.innerWidth, window.innerHeight );
+            renderer.autoClear = false;
+            renderer.clear();
+			document.body.appendChild( renderer.domElement );
+
+            function GetHair(startPos, subdiv, length){
+                var segmentSize = length/subdiv;
+                
+                var points = [];
+                var velocities=[];
+                var springs=[];
+
+                var currentPos = startPos.clone();
+                for(var i=0; i<=subdiv; i++) {
+                    points.push( currentPos.clone());
+                    currentPos.add(new THREE.Vector3(0.1 * (Math.random() * 2 -1) , -segmentSize, 0));
+                    velocities.push( new THREE.Vector3(0, 0, 0 ) );
+                    if(i<subdiv) {
+                        var spring = {};
+                        spring.p0 = i*3;
+                        spring.p1 = i*3+3;
+                        spring.restLength = segmentSize;
+                        springs[i]=spring;                        
+                    }
+                }
+                var geometry = new THREE.BufferGeometry().setFromPoints( points );
+                var line = new THREE.Line( geometry, material );
+                line.geometryClone = line.geometry.clone();
+                line.velocities = velocities;
+                line.springs = springs;
+                line.originPos = startPos.clone();
+                return line;
+            }
+
+            {
+                var geometry = new THREE.PlaneGeometry(30, 10);
+                var dummyPlaneMaterial = new THREE.MeshBasicMaterial({});
+                dummyPlane = new THREE.Mesh( geometry, dummyPlaneMaterial );
+                // scene.add(dummyPlane);
+            }
+
+
+
+			camera.position.z = 5;
+            camera.lookAt(0,0,0);
+
+            var isDragging=false;
+            var hitPosition;
+            var raycaster = new THREE.Raycaster();
+            var lines =[]
+
+            function Init() {
+                lines = [];
+                var numAdded=0;
+                scene.children=[];
+                while(numAdded<numHair) {
+                    var newPos = new THREE.Vector3(2*(Math.random()*2-1), 2*(Math.random()*2-1), 0);
+                    if(newPos.length()<controls.radius){
+                        var line = GetHair(newPos, subdiv, hairLength);
+                        lines.push(line);
+                        scene.add(line);
+                        numAdded++;
+                    }
+                }
+            }
+
+            Init();
+
+
+            //OK to do on CPU
+            function AddForces(line) {
+                var array = line.geometryClone.attributes.position.array;
+
+                if(isDragging && hitPosition) {
+                    array[0] = hitPosition.x + line.originPos.x;     
+                    array[1] = hitPosition.y + line.originPos.y;
+                    // array[0] = hitPosition.x
+                    // array[1] = hitPosition.y
+                    // console.log(hitPosition);
+                }
+
+                //Add gravity to all vertices
+                for(var i=0; i<array.length; i+=3) {
+                    if(i>=3) {
+                        array[i] -= gravity.x;
+                        array[i+1] -= gravity.y;
+                        array[i+2] -= gravity.z;
+                    }
+
+                    var velInx = i/3;
+                    line.velocities[velInx].multiplyScalar(controls.damping); 
+
+                    if(i>=3) {
+                        array[i] += line.velocities[velInx].x;
+                        array[i+1] += line.velocities[velInx].y;
+                        array[i+2] += line.velocities[velInx].z;
+                    }
+                }
+            }
+            
+            //Could do on GPU
+            function ResolveSprings(line, springForce, delta) {
+                var array = line.geometryClone.attributes.position.array;
+                //Resolve all the springs
+                for(var i=0; i<line.springs.length; i++) {
+                    var displacement = new THREE.Vector3(0,0,0);
+                    
+                    var v0Inx = line.springs[i].p0;
+                    var v0 = new THREE.Vector3(array[v0Inx], array[v0Inx+1], array[v0Inx+2]);
+                    var v1Inx = line.springs[i].p1;
+                    var v1 = new THREE.Vector3(array[v1Inx], array[v1Inx+1], array[v1Inx+2]);
+
+                    var springVector = v0.clone().sub(v1);
+                    var length = springVector.length();
+                    var undeformedLength = line.springs[i].restLength;
+                    var diff = Math.min(3,(length - undeformedLength) / undeformedLength);
+                    var forceScaler = springForce * diff;
+                    var forceVector = springVector.clone().multiplyScalar(forceScaler * delta);
+                    displacement.add(forceVector);
+
+                    array[v1Inx] += displacement.x;
+                    array[v1Inx+1] += displacement.y;                    
+                    array[v1Inx+2] += displacement.z;                    
+                }
+            }
+
+            //Ok to do on CPU
+            function UpdateVelocities(line) {   
+                var newPositions = line.geometryClone.attributes.position.array;
+                var prevPositions = line.geometry.attributes.position.array;
+
+                //Set the velocities to the difference
+                for(var i=3; i<newPositions.length; i+=3) {
+                    var velInx=  i/3;
+                    var x = newPositions[i] - prevPositions[i];
+                    var y = newPositions[i+1] - prevPositions[i+1];
+                    var z = newPositions[i+2] - prevPositions[i+2];
+                    line.velocities[velInx] = new THREE.Vector3(x,y,z);
+                    velInx++;
+                }
+            }
+
+            var startTime=Date.now();
+            var elapsedSeconds=0;
+			var animate = function () {
+				requestAnimationFrame( animate );
+                var elapsedMilliseconds = Date.now() - startTime;
+                elapsedSeconds = elapsedMilliseconds / 1000.;
+
+                red = Math.sin(elapsedSeconds + 3.14)  *0.5 + 0.5
+                green = Math.cos(elapsedSeconds )  *0.5 + 0.5
+                blue = Math.sin(elapsedSeconds * 2.5 )  *0.5 + 0.5
+                material.color =  new THREE.Color( red, green, blue );
+
+                for(var i=0; i<lines.length; i++) {
+                    var line = lines[i];
+                    AddForces(line);
+                    ResolveSprings(line, controls.stiffness, 0.001);
+                    UpdateVelocities(line);
+                    line.geometry = line.geometryClone.clone();
+                }
+                
+				renderer.render( scene, camera );
+			};
+
+
+            document.onmousedown = function(event){
+                isDragging=true;
+                mousePos = [event.clientX, event.clientY]
+                var mouse = new THREE.Vector2();                
+                mouse.x = ( mousePos[0] / window.innerWidth);
+                mouse.y = ( mousePos[1] / window.innerHeight);
+                if(mouse.x>0.85 && mouse.y<0.4) isDragging=false;
+            }
+            
+            document.onmouseup = function(){
+                prevMousePos=undefined;
+                isDragging=false;
+            }
+            document.onmousemove = function(event){
+                mousePos = [event.clientX, event.clientY]
+                if(isDragging) {
+                    var mouse = new THREE.Vector2();                
+                    mouse.x = ( mousePos[0] / window.innerWidth ) * 2 - 1;
+                    mouse.y = - ( mousePos[1] / window.innerHeight ) * 2 + 1;
+                    raycaster.setFromCamera( mouse, camera );
+                    var intersects = raycaster.intersectObject( dummyPlane);
+                    for ( var i = 0; i < intersects.length; i++ ) {
+                        hitPosition = intersects[i].point;
+                    }                  
+                }
+            }       
+            document.onkeydown = function(e){
+                if(e.keyCode == 32){
+                    renderer.clear();
+                }
+            } 
+
+			animate();
+		</script>
+	</body>
+</html>
