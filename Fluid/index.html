@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>My first three.js app</title>
+		<style>
+			body { margin: 0; }
+			canvas { display: block; }
+		</style>
+	</head>
+	<body>
+		<script src="../js/three.js"></script>
+        <script type="text/javascript" src="../js/dat.gui.min.js"></script>
+		<script>
+            
+                                    
+            var gui = new dat.GUI();
+            var folder1 = gui.addFolder('Controls');
+            var controls = {
+                velocity : 0.8,
+				damping:0.9,
+                radius:3,
+                strength:1
+            };
+
+            var velocityController = folder1.add(controls, 'velocity', 0.01, 2.0);
+            var dampingController = folder1.add(controls, 'damping', 0.2, 1.0);
+            folder1.add(controls, 'radius', 1, 15);
+            folder1.add(controls, 'strength', 1, 10);
+
+            var width = 64;
+            var size = 2;
+            var t = 0.01; //time interval
+            var d = size / (width); //Distance btw vert
+
+            var f1 = controls.velocity * controls.velocity * t * t / (d * d);
+            var f2 = 1.0 / (controls.damping * t + 2);
+            var k1 = (4.0 - 8.0 * f1) * f2;
+            var k2 = (controls.damping * t - 2) * f2;
+            var k3 = 2.0 * f1 * f2;
+
+            velocityController.onChange(function() {
+                 f1 = controls.velocity * controls.velocity * t * t / (d * d);
+                 f2 = 1.0 / (controls.damping * t + 2);
+                 k1 = (4.0 - 8.0 * f1) * f2;
+                 k2 = (controls.damping * t - 2) * f2;
+                 k3 = 2.0 * f1 * f2;
+            })
+
+            dampingController.onChange(function() {
+                 f1 = controls.velocity * controls.velocity * t * t / (d * d);
+                 f2 = 1.0 / (controls.damping * t + 2);
+                 k1 = (4.0 - 8.0 * f1) * f2;
+                 k2 = (controls.damping * t - 2) * f2;
+                 k3 = 2.0 * f1 * f2;
+            })
+
+			var scene = new THREE.Scene();
+			var camera = new THREE.PerspectiveCamera( 75, window.innerWidth/window.innerHeight, 0.1, 1000 );
+
+			var renderer = new THREE.WebGLRenderer();
+			renderer.setSize( window.innerWidth, window.innerHeight );
+			document.body.appendChild( renderer.domElement );
+
+            var geometry = new THREE.PlaneBufferGeometry(size, size, width, width);
+            var previousPositions = null;
+            // var previousNormal = geometry.attributes.normal.clone();
+            
+            console.log(geometry);
+			
+            var material = new THREE.MeshPhongMaterial( { color: 0x00ff00 } );
+            // material.wireframe= true;
+			var cube = new THREE.Mesh( geometry, material );
+			scene.add( cube );
+
+            var light = new THREE.PointLight( 0xffffff, 1, 100 );
+            light.position.set( 0.5, 0.5, 1 );
+            scene.add( light );            
+
+			camera.position.z = 2;
+
+
+            var a = 0;
+            // var f1 = 
+
+			var animate = function () {
+
+                //Stores the current position
+                var localPreviousPosition = geometry.attributes.position.clone();
+
+                // previousNormal = geometry.attributes.normal.clone();
+                if(previousPositions !=null) {
+                    //Compute the new things into these buffers from the alternate buffers
+                    var currentPositionsArray = localPreviousPosition.array;
+                    var previousPositionsArray = previousPositions.array;
+                    for(var i=0; i<previousPositionsArray.length; i+=3) {
+                        var inx = i/3;
+                        var xInx = Math.floor(inx%(width+1));
+                        var yInx = Math.floor(inx/(width+1));
+                        if(xInx>0 && yInx>0 && xInx < width && yInx < width) {
+                            var cx = currentPositionsArray[i]; var cy = currentPositionsArray[i+1]; var cz = currentPositionsArray[i+2];
+                            var px = previousPositionsArray[i]; var py = previousPositionsArray[i+1]; var pz = previousPositionsArray[i+2];
+                            
+                            var yOffset=(width+1)*3;
+                            var newZ = k1 * currentPositionsArray[i+2] + 
+                                    k2 * previousPositionsArray[i+2]+ 
+                                    k3 * (currentPositionsArray[i + 3 + 2] + currentPositionsArray[i - 3 + 2]
+                                    + currentPositionsArray[i + yOffset + 2]+ currentPositionsArray[i + 2 - yOffset]);
+
+                            geometry.attributes.position.array[i+2] =newZ;
+                        }
+                    }
+                }
+
+                geometry.computeVertexNormals ();
+                geometry.attributes.normal.needsUpdate=true;
+                geometry.attributes.position.needsUpdate=true;
+                previousPositions = localPreviousPosition.clone();
+
+                //Copy the new positions into the alternate buffers
+				requestAnimationFrame( animate );
+				renderer.render( scene, camera );
+			};
+
+
+            var raycaster = new THREE.Raycaster();
+            document.onmousedown = function(){
+            }
+
+            document.onmouseup = function(){
+                // prevMousePos=undefined;
+                // isDragging=false;
+            }
+            document.onmousemove = function(event){
+                mousePos = [event.clientX, event.clientY]
+                var mouse = new THREE.Vector2();                
+                mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+                mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+                var intersects = raycaster.intersectObjects( scene.children );
+                raycaster.setFromCamera( mouse, camera );
+                for ( var i = 0; i < intersects.length; i++ ) {
+                    // console.log(intersects[i]);
+                    hitPosition = intersects[i].uv;
+                    hitPosition.y = 1 - hitPosition.y;
+                    // console.log(intersects[i]);
+
+                    var xInx = Math.floor(hitPosition.x * width);
+                    var yInx = Math.floor(hitPosition.y * width);
+                    // console.log(xInx, yInx);
+                    // if(xInx>0 && yInx>0 && xInx < width-1 && yInx < width-1) {
+                    //     var inx = (yInx * (width+1) + xInx)*3;
+                    //     // previousPositions.array[inx+2] +=0.01;
+                    //     if(geometry.attributes.position.array[inx+2]<0.1){
+                    //         geometry.attributes.position.array[inx+2] +=0.01;
+                    //     }
+                    // }
+                    var radius=Math.floor(controls.radius);
+
+                    for(var dx = xInx-radius; dx<xInx+radius; dx++) {
+                        for(var dy = yInx-radius; dy<yInx+radius; dy++) {
+                            var xx = Math.abs(dx-xInx);
+                            var yy = Math.abs(dy-yInx);
+                            if(xx*xx+yy*yy<radius*radius) {
+                                if(dx>0 && dx>0 && dx < width-1 && dy < width-1) {
+                                    var inx = (dy * (width+1) + dx)*3;
+                                    // if(geometry.attributes.position.array[inx+2]<0.1){
+                                        geometry.attributes.position.array[inx+2] += (controls.strength/1000);
+                                    // }
+                                }
+                            }
+                        }
+                    }
+                    // console.log(hitPosition);
+
+                    // isDragging=true;
+                }
+                 
+            }            
+
+			animate();
+		</script>
+	</body>
+</html>

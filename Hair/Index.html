@@ -11,7 +11,7 @@
 	<body>
 		<script src="../js/three.js"></script>
         <script type="text/javascript" src="../js/dat.gui.min.js"></script>        
-        <script id="vertexShader" type="x-shader/x-vertex">
+        <script id="planeVertexShader" type="x-shader/x-vertex">
             varying vec2 vUv;
             void main()	{
                 vUv = uv;
@@ -20,16 +20,68 @@
             }
         </script>
         
-        <script id="fragmentShader" type="x-shader/x-fragment">
-            uniform sampler2D inputTex;
+        <script id="planeFragmentShader" type="x-shader/x-fragment">
             varying vec2 vUv;
+            uniform sampler2D map;
             void main()	{
-                vec4 res = texture2D(inputTex, vUv);
-                gl_FragColor=res - vec4(0, 0.01, 0,0);
+                vec4 res = texture2D(map, vUv);
+                float alpha = res.a;
+                //gl_FragColor=vec4(alpha, alpha, alpha, 1.0);
+                gl_FragColor=res;
             }
         </script>         
 
+        <script id="vertexShader" type="x-shader/x-vertex">
+            //Built in uniforms:
+            //uniform mat4 modelMatrix;
+            //uniform mat4 modelViewMatrix;
+            //uniform mat4 projectionMatrix;
+            //uniform mat4 viewMatrix;
+            //uniform mat3 normalMatrix;
+            //uniform vec3 cameraPosition
+
+            //Vertex attributes
+            //attribute vec3 position;
+            //attribute vec3 normal;
+            //attribute vec2 uv;            
+            void main()	{
+                mat4 mvp = projectionMatrix * modelViewMatrix  * modelMatrix ;
+                gl_Position = mvp * vec4( position, 1.0 );
+            }
+        </script>
+    
+        <script id="fragmentShader" type="x-shader/x-fragment">
+            //Frag attributes
+            //attribute vec3 color;
+            //uniform mat4 viewMatrix;
+            //uniform vec3 cameraPosition;            
+            void main()	{
+                gl_FragColor = vec4(0, 1 , 0 , 1.0);
+            }
+        </script>  
+
         <script>
+            var backBuffer, plane, bufferScene;
+            {
+                // console.log(window);
+                bufferScene = new THREE.Scene();     
+                backBuffer = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, {minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, format:THREE.RGBAFormat, type: THREE.FloatType});
+                
+                var geometry = new THREE.PlaneGeometry();
+                // var planeMaterial = new THREE.MeshBasicMaterial();
+                var planeMaterial = new THREE.ShaderMaterial( {
+                    uniforms: {
+                        map: {value: backBuffer.texture}
+                    },
+                    vertexShader: document.getElementById( 'planeVertexShader' ).textContent,
+                    fragmentShader: document.getElementById( 'planeFragmentShader' ).textContent
+                });            
+                renderPlane = new THREE.Mesh( geometry, planeMaterial );
+                bufferScene.add( renderPlane );
+            }                
+
+
+
             var gui = new dat.GUI();
             var folder1 = gui.addFolder('Controls');
             var controls = {
@@ -47,7 +99,7 @@
             radiusController = folder1.add(controls, 'radius', 0.1, 3);
             stiffnessController = folder1.add(controls, 'stiffness', 1, 15);
             dampingController = folder1.add(controls, 'damping', 0.5, 0.9);
-            var numHairController = folder1.add(controls, 'numHair', 1, 100);
+            var numHairController = folder1.add(controls, 'numHair', 1, 300);
             var subdivController = folder1.add(controls, 'subdiv', 1, 10);
             var hairLengthController = folder1.add(controls, 'hairLength', 0.1, 3);
             var gravityXController = folder1.add(controls, 'gravityX', 0, 1);
@@ -114,8 +166,16 @@
                 Init();
             });
 
-            var material = new THREE.LineBasicMaterial( { color: 0x0000ff } );
-
+            var material = new THREE.LineDashedMaterial( { color: 0x0000ff } );
+            // var material = new THREE.ShaderMaterial( {
+            //     uniforms: {
+            //         time: { value: 1.0 },
+            //         resolution: { value: new THREE.Vector2() }
+            //     },
+            //     // blending: THREE.AdditiveBlending,
+            //     vertexShader: document.getElementById( 'vertexShader' ).textContent,
+            //     fragmentShader: document.getElementById( 'fragmentShader' ).textContent
+            // } );
 
 			var scene = new THREE.Scene();
 			var camera = new THREE.PerspectiveCamera( 75, window.innerWidth/window.innerHeight, 0.1, 1000 );
@@ -124,6 +184,7 @@
 			renderer.setSize( window.innerWidth, window.innerHeight );
             renderer.autoClear = false;
             renderer.clear();
+            
 			document.body.appendChild( renderer.domElement );
 
             function GetHair(startPos, subdiv, length){
@@ -194,9 +255,12 @@
             function AddForces(line) {
                 var array = line.geometryClone.attributes.position.array;
 
-                if(isDragging && hitPosition) {
+                if(hitPosition) {
                     array[0] = hitPosition.x + line.originPos.x;     
                     array[1] = hitPosition.y + line.originPos.y;
+                    if(isDragging) {
+
+                    }
                     // array[0] = hitPosition.x
                     // array[1] = hitPosition.y
                     // console.log(hitPosition);
@@ -283,7 +347,14 @@
                     line.geometry = line.geometryClone.clone();
                 }
                 
+                renderer.setRenderTarget(backBuffer);
+                // if(!isDragging) {
+                //     renderer.clearColor(); 
+                // }
 				renderer.render( scene, camera );
+                
+                renderer.setRenderTarget(null);
+				renderer.render( bufferScene, camera );
 			};
 
 
@@ -302,19 +373,18 @@
             }
             document.onmousemove = function(event){
                 mousePos = [event.clientX, event.clientY]
-                if(isDragging) {
-                    var mouse = new THREE.Vector2();                
-                    mouse.x = ( mousePos[0] / window.innerWidth ) * 2 - 1;
-                    mouse.y = - ( mousePos[1] / window.innerHeight ) * 2 + 1;
-                    raycaster.setFromCamera( mouse, camera );
-                    var intersects = raycaster.intersectObject( dummyPlane);
-                    for ( var i = 0; i < intersects.length; i++ ) {
-                        hitPosition = intersects[i].point;
-                    }                  
-                }
+                var mouse = new THREE.Vector2();                
+                mouse.x = ( mousePos[0] / window.innerWidth ) * 2 - 1;
+                mouse.y = - ( mousePos[1] / window.innerHeight ) * 2 + 1;
+                raycaster.setFromCamera( mouse, camera );
+                var intersects = raycaster.intersectObject( dummyPlane);
+                for ( var i = 0; i < intersects.length; i++ ) {
+                    hitPosition = intersects[i].point;
+                }                  
             }       
             document.onkeydown = function(e){
                 if(e.keyCode == 32){
+                    renderer.setRenderTarget(backBuffer);
                     renderer.clear();
                 }
             } 
